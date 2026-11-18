@@ -1,7 +1,7 @@
 /*
   Tangible Earth | Arduino Uno R3, WonderCam Feature Learning, 5641AS, SG90.
-  ID 1 penguin, 2 polar bear, 3 car, 4 bicycle. Only the car adds 20 F
-  to the simulated temperature and moves the ice servo by 180 degrees on each new detection.
+  IDs: 1 penguin, 2 polar bear, 3 bicycle, 4 car, 5 hand rake, 6 electric leaf blower.
+  Each new car or electric leaf blower adds 20 F and moves the ice servo by 180 degrees.
   With two connected digits, three-digit and larger values scroll left.
   Serial Monitor: 9600 baud. Send r to start another demo at 70 F and 180 degrees.
 
@@ -20,11 +20,11 @@
 #error Select Arduino Uno R3 (ATmega328P, 16 MHz).
 #endif
 
-const byte PENGUIN = 1, POLAR_BEAR = 2, CAR = 3, BICYCLE = 4;
+const byte PENGUIN = 1, POLAR_BEAR = 2, BICYCLE = 3, CAR = 4, HAND_RAKE = 5, LEAF_BLOWER = 6;
 const byte SERVO_PIN = 6;
 const byte HOME_DEG = 180, AWAY_DEG = 0;
-const uint32_t START_TEMP_F = 70, CAR_RISE_F = 20;
-const unsigned long POLL_MS = 100, CAR_DWELL_MS = 500, CLEAR_DWELL_MS = 1000;
+const uint32_t START_TEMP_F = 70, TEMP_RISE_F = 20;
+const unsigned long POLL_MS = 100, TRIGGER_DWELL_MS = 500, CLEAR_DWELL_MS = 1000;
 const unsigned long MAX_SAMPLE_GAP_MS = 300;
 
 const byte SEGMENTS[] = {2, 3, 4, 7, 8, 9, 10};
@@ -44,16 +44,15 @@ int commandedDeg = HOME_DEG, targetDeg = HOME_DEG;
 uint32_t pendingHalfTurns = 0;
 unsigned long lastStepMs = 0, lastPollMs = 0, lastReportMs = 0;
 
-enum Scene : byte { UNKNOWN_SCENE, CAR_SCENE, CLEAR_SCENE };
-Scene candidate = UNKNOWN_SCENE;
+Scene candidate = Scene::Unknown;
 unsigned long candidateSince = 0, lastSampleMs = 0;
-bool carLatched = false;
+Scene latched = Scene::Clear;
 bool automatic = true;
 EarthMemory memory;
 WonderCamFeatureReader::Result latest = {WonderCamFeatureReader::BusError, 0, 0};
 
 void saveState() {
-  EarthState state = {temperatureF, HOME_DEG, byte(automatic), byte(carLatched)};
+  EarthState state = {temperatureF, HOME_DEG, byte(automatic), latched};
   memory.save(state);
 }
 
@@ -130,12 +129,13 @@ void updateServo(unsigned long now) {
 }
 
 Scene sceneOf(const WonderCamFeatureReader::Result &r) {
-  if (r.status != WonderCamFeatureReader::Ok) return UNKNOWN_SCENE;
-  if (r.id == 0) return CLEAR_SCENE;  // explicit successful "no match" result
-  if (r.confidence == 0) return UNKNOWN_SCENE;
-  if (r.id == CAR) return CAR_SCENE;
-  if (r.id == PENGUIN || r.id == POLAR_BEAR || r.id == BICYCLE) return CLEAR_SCENE;
-  return UNKNOWN_SCENE;
+  if (r.status != WonderCamFeatureReader::Ok) return Scene::Unknown;
+  if (r.id == 0) return Scene::Clear;  // explicit successful "no match" result
+  if (r.confidence == 0) return Scene::Unknown;
+  if (r.id == CAR) return Scene::Car;
+  if (r.id == LEAF_BLOWER) return Scene::Blower;
+  if (r.id == PENGUIN || r.id == POLAR_BEAR || r.id == BICYCLE || r.id == HAND_RAKE) return Scene::Clear;
+  return Scene::Unknown;
 }
 
 void observe(Scene scene, unsigned long now) {
@@ -145,18 +145,23 @@ void observe(Scene scene, unsigned long now) {
   }
   lastSampleMs = now;
   const unsigned long held = now - candidateSince;
-  if (scene == CLEAR_SCENE && held >= CLEAR_DWELL_MS && carLatched) {
-    carLatched = false;
-    saveState();
+  if (scene == Scene::Clear) {
+    if (held >= CLEAR_DWELL_MS && latched != Scene::Clear) {
+      latched = Scene::Clear;
+      saveState();
+    }
+    return;
   }
-  if (!automatic || scene != CAR_SCENE || carLatched || held < CAR_DWELL_MS) return;
-  carLatched = true;
-  if (temperatureF <= UINT32_MAX - CAR_RISE_F)
-    setTemperature(temperatureF + CAR_RISE_F, now);
+  if (!automatic || scene == Scene::Unknown || latched == Scene::Unknown ||
+      latched == scene || held < TRIGGER_DWELL_MS) return;
+  latched = scene;
+  if (temperatureF <= UINT32_MAX - TEMP_RISE_F)
+    setTemperature(temperatureF + TEMP_RISE_F, now);
   if (pendingHalfTurns < UINT32_MAX) ++pendingHalfTurns;
   startNextHalfTurn();
   saveState();
-  Serial.print(F("CAR +20F | T="));
+  Serial.print(scene == Scene::Car ? F("Car") : F("Electric leaf blower"));
+  Serial.print(F(" +20F | T="));
   Serial.print(temperatureF);
   Serial.print(F("F | servo target="));
   Serial.println(targetDeg);
@@ -168,6 +173,8 @@ const __FlashStringHelper *featureName(byte id) {
     case POLAR_BEAR: return F("Polar bear");
     case CAR: return F("Car");
     case BICYCLE: return F("Bicycle");
+    case HAND_RAKE: return F("Hand rake");
+    case LEAF_BLOWER: return F("Electric leaf blower");
     case 0: return F("No match");
     default: return F("Other");
   }
@@ -198,6 +205,14 @@ bool parseUnsigned(const char *s, uint32_t &out) {
   return true;
 }
 
+void suppressCurrentDetection(unsigned long now) {
+  if (now - lastSampleMs > MAX_SAMPLE_GAP_MS || candidate == Scene::Unknown) {
+    latched = Scene::Unknown;  // Wait for a clear frame sequence after a lost reading.
+  } else if (candidate != Scene::Clear) {
+    latched = candidate;
+  }
+}
+
 void handleCommand(const char *cmd, unsigned long now) {
   uint32_t value;
   if (strcmp(cmd, "!STATE") == 0) { report(); return; }
@@ -205,14 +220,13 @@ void handleCommand(const char *cmd, unsigned long now) {
     setTemperature(START_TEMP_F, now);
     pendingHalfTurns = 0;
     targetDeg = HOME_DEG;
-    // Ignore a car held in place across reset or an interrupted camera read.
-    carLatched = carLatched || candidate != CLEAR_SCENE || now - lastSampleMs > MAX_SAMPLE_GAP_MS;
-    candidate = UNKNOWN_SCENE;
+    suppressCurrentDetection(now);
+    candidate = Scene::Unknown;
   } else if (strncmp(cmd, "!TEMP ", 6) == 0 && parseUnsigned(cmd + 6, value)) {
     setTemperature(value, now);
   } else if (strcmp(cmd, "!WARM") == 0) {
-    if (temperatureF > UINT32_MAX - CAR_RISE_F) { Serial.println(F("ERR RANGE")); return; }
-    setTemperature(temperatureF + CAR_RISE_F, now);
+    if (temperatureF > UINT32_MAX - TEMP_RISE_F) { Serial.println(F("ERR RANGE")); return; }
+    setTemperature(temperatureF + TEMP_RISE_F, now);
   } else if (strncmp(cmd, "!MOTOR ", 7) == 0 && parseUnsigned(cmd + 7, value) && value <= 180) {
     pendingHalfTurns = 0;
     targetDeg = int(value);
@@ -221,8 +235,8 @@ void handleCommand(const char *cmd, unsigned long now) {
     if (enable != automatic) {
       automatic = enable;
       if (!enable) pendingHalfTurns = 0;
-      candidate = UNKNOWN_SCENE;
-      if (enable) carLatched = true;
+      if (enable) suppressCurrentDetection(now);
+      candidate = Scene::Unknown;
     }
   } else {
     Serial.println(F("ERR COMMAND")); return;
@@ -256,14 +270,14 @@ void setup() {
   if (memory.load(saved)) {
     setTemperature(saved.temperature, millis());
     automatic = saved.automatic;
-    carLatched = saved.carLatched;
+    latched = saved.latched;
   }
   updateDisplay(millis());
   startDisplay();
   camera.begin();
   iceServo.write(targetDeg);
   iceServo.attach(SERVO_PIN);
-  Serial.println(F("Earth ready | 1 Penguin, 2 Polar bear, 3 Car, 4 Bicycle"));
+  Serial.println(F("Earth ready | 1 Penguin, 2 Polar bear, 3 Bicycle, 4 Car, 5 Hand rake, 6 Electric leaf blower"));
 }
 
 void loop() {

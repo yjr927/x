@@ -2,13 +2,16 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 
+// Values 0 and 1 also decode the old firmware's unlatched and latched flags.
+enum class Scene : uint8_t { Clear = 0, Unknown = 1, Car = 2, Blower = 3 };
+
 // Opening USB serial may restart an Uno. Commit each change to the next slot,
 // marking it valid last, so a partial write leaves the previous state usable.
 struct __attribute__((packed)) EarthState {
   uint32_t temperature;
   uint8_t angle;
   uint8_t automatic;
-  uint8_t carLatched;
+  Scene latched;
 };
 
 class EarthMemory {
@@ -36,7 +39,7 @@ public:
       Record r;
       EEPROM.get(i * sizeof(r), r);
       if (r.valid != VALID || r.checksum != checksum(r) || r.state.angle > 180 ||
-          r.state.automatic > 1 || r.state.carLatched > 1) continue;
+          r.state.automatic > 1 || r.state.latched > Scene::Blower) continue;
       if (slot < 0 || int8_t(r.sequence - current.sequence) > 0) { slot = i; current = r; }
     }
     if (slot < 0) return false;

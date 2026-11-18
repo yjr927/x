@@ -9,7 +9,7 @@
 #error Select Arduino Uno R3 (ATmega328P, 16 MHz).
 #endif
 
-const byte PENGUIN = 1, POLAR_BEAR = 2, CAR = 3, BICYCLE = 4;
+const byte PENGUIN = 1, POLAR_BEAR = 2, BICYCLE = 3, CAR = 4, HAND_RAKE = 5, LEAF_BLOWER = 6;
 const byte SERVO_PIN = 6;
 const byte HOME_DEG = 180, AWAY_DEG = 0;
 const uint32_t START_TEMP_F = 70, CAR_RISE_F = 20;
@@ -122,7 +122,7 @@ Scene sceneOf(const WonderCamFeatureReader::Result &r) {
   if (r.id == 0) return CLEAR_SCENE;  // explicit successful "no match" result
   if (r.confidence == 0) return UNKNOWN_SCENE;
   if (r.id == POLAR_BEAR) return CAR_SCENE;
-  if (r.id == PENGUIN || r.id == CAR || r.id == BICYCLE) return CLEAR_SCENE;
+  if (r.id == PENGUIN || r.id == CAR || r.id == BICYCLE || r.id == HAND_RAKE || r.id == LEAF_BLOWER) return CLEAR_SCENE;
   return UNKNOWN_SCENE;
 }
 
@@ -155,6 +155,8 @@ const __FlashStringHelper *featureName(byte id) {
     case POLAR_BEAR: return F("Polar bear");
     case CAR: return F("Car");
     case BICYCLE: return F("Bicycle");
+    case HAND_RAKE: return F("Hand rake");
+    case LEAF_BLOWER: return F("Electric leaf blower");
     case 0: return F("No match");
     default: return F("Other");
   }

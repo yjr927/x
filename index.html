@@ -17,11 +17,11 @@
 </div>
 <section class="panel"><div><strong>WonderCam</strong><small id="feature">等待识别数据</small></div><div class="mode" role="group" aria-label="识别联动"><button data-auto="1" data-cmd="!AUTO 1" class="control" aria-pressed="false" disabled>相机联动</button><button data-auto="0" data-cmd="!AUTO 0" class="control" aria-pressed="false" disabled>仅手动</button></div></section>
 <section class="panel resetpanel"><div><strong>演示复位</strong><small>温度回到 70°F，舵机回到 180°。</small></div><button data-cmd="!RESET" class="reset control" disabled>↺ &nbsp; Reset · 总复位</button></section>
-<details class="help"><summary>连接与操作说明</summary><p>先上传配套的 TangibleEarth.ino。关闭 Arduino IDE 的串口监视器，在桌面 Chrome 或 Edge 打开本页，再选择 Arduino Uno 的 USB 端口。相机可单独用 USB 供电。</p><p>相机联动时，每次重新识别汽车（ID 3），温度升高 20°F，舵机在 180° 和 0° 两端之间转半圈。移开至少 1 秒再放回即可再次触发。现场需要接管时，点「仅手动」暂停识别联动。角度是 Uno 发出的舵机指令值。</p></details>
+<details class="help"><summary>连接与操作说明</summary><p>先上传配套的 TangibleEarth.ino。关闭 Arduino IDE 的串口监视器，在桌面 Chrome 或 Edge 打开本页，再选择 Arduino Uno 的 USB 端口。相机可单独用 USB 供电。</p><p>相机联动时，汽车（ID 4）和电动吹叶机（ID 6）每次稳定识别后升温 20°F，舵机转 180°。自行车（ID 3）和手动除叶耙（ID 5）保持当前温度和舵机目标。汽车和吹叶机可以直接换着放。同一道具留在镜头里只触发一次，移开至少 1 秒再放回即可再次触发。现场需要接管时，点「仅手动」暂停识别联动。角度是 Uno 发出的舵机指令值。</p></details>
 </main><script>
 'use strict';
 const $ = id => document.getElementById(id);
-const names=['无匹配','企鹅','北极熊','汽车','自行车'];
+const names=['无匹配','企鹅','北极熊','自行车','汽车','手动除叶耙','电动吹叶机'];
 const enc=new TextEncoder();
 let port=null, reader=null, writer=null, reading=null, closing=false, online=false;
 let lastSeen=0, sessionStart=0, waiting='', sentAt=0;
