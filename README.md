@@ -1,5 +1,7 @@
 # Tangible Earth
 
+[打开装置控制台 · Live control panel](https://yjr927.github.io/x/)
+
 Download this repository and open `TangibleEarth/TangibleEarth.ino` in Arduino IDE. Select **Arduino Uno** and upload. The sketch uses the Arduino **Servo** library, the bundled AVR Wire and EEPROM libraries, and the two headers beside the sketch.
 
 Open `index.html` in desktop Chrome or Edge, close Arduino IDE's Serial Monitor, and click **连接 Arduino**. Select the Uno USB port. The web page works offline and sends commands directly over USB.
