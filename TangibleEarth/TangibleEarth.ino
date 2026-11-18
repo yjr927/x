@@ -1,9 +1,9 @@
 /*
   Tangible Earth | Arduino Uno R3, WonderCam Feature Learning, 5641AS, SG90.
   ID 1 penguin, 2 polar bear, 3 car, 4 bicycle. Only the car adds 20 F
-  to the simulated temperature and moves the ice servo from 0 to 180 degrees.
+  to the simulated temperature and moves the ice servo by 180 degrees on each new detection.
   With two connected digits, three-digit and larger values scroll left.
-  Serial Monitor: 9600 baud. Send r to start another demo at 70 F and 0 degrees.
+  Serial Monitor: 9600 baud. Send r to start another demo at 70 F and 180 degrees.
 
   Existing wiring: SDA=A4, SCL=A5, common GND, WonderCam powered via USB.
   SG90 signal=D6. Keep the display wiring and its nine resistors:
@@ -22,7 +22,7 @@
 
 const byte PENGUIN = 1, POLAR_BEAR = 2, CAR = 3, BICYCLE = 4;
 const byte SERVO_PIN = 6;
-const byte HOME_DEG = 0, AWAY_DEG = 180;
+const byte HOME_DEG = 180, AWAY_DEG = 0;
 const uint32_t START_TEMP_F = 70, CAR_RISE_F = 20;
 const unsigned long POLL_MS = 100, CAR_DWELL_MS = 500, CLEAR_DWELL_MS = 1000;
 const unsigned long MAX_SAMPLE_GAP_MS = 300;
@@ -41,6 +41,7 @@ uint32_t temperatureF = START_TEMP_F;
 WonderCamFeatureReader camera;
 Servo iceServo;
 int commandedDeg = HOME_DEG, targetDeg = HOME_DEG;
+uint32_t pendingHalfTurns = 0;
 unsigned long lastStepMs = 0, lastPollMs = 0, lastReportMs = 0;
 
 enum Scene : byte { UNKNOWN_SCENE, CAR_SCENE, CLEAR_SCENE };
@@ -52,7 +53,7 @@ EarthMemory memory;
 WonderCamFeatureReader::Result latest = {WonderCamFeatureReader::BusError, 0, 0};
 
 void saveState() {
-  EarthState state = {temperatureF, byte(targetDeg), byte(automatic), byte(carLatched)};
+  EarthState state = {temperatureF, HOME_DEG, byte(automatic), byte(carLatched)};
   memory.save(state);
 }
 
@@ -110,7 +111,18 @@ void updateDisplay(unsigned long now) {
   displayPair = (displayDigit(first) << 4) | displayDigit(first + 1);
 }
 
+void startNextHalfTurn() {
+  if (!pendingHalfTurns || commandedDeg != targetDeg) return;
+  if (commandedDeg != HOME_DEG && commandedDeg != AWAY_DEG) {
+    targetDeg = HOME_DEG;  // Align after a manual angle before counting a full stroke.
+    return;
+  }
+  targetDeg = commandedDeg == HOME_DEG ? AWAY_DEG : HOME_DEG;
+  --pendingHalfTurns;
+}
+
 void updateServo(unsigned long now) {
+  startNextHalfTurn();
   if (commandedDeg == targetDeg || now - lastStepMs < 20) return;
   lastStepMs = now;
   commandedDeg += targetDeg > commandedDeg ? 1 : -1;
@@ -141,7 +153,8 @@ void observe(Scene scene, unsigned long now) {
   carLatched = true;
   if (temperatureF <= UINT32_MAX - CAR_RISE_F)
     setTemperature(temperatureF + CAR_RISE_F, now);
-  targetDeg = AWAY_DEG;
+  if (pendingHalfTurns < UINT32_MAX) ++pendingHalfTurns;
+  startNextHalfTurn();
   saveState();
   Serial.print(F("CAR +20F | T="));
   Serial.print(temperatureF);
@@ -190,6 +203,7 @@ void handleCommand(const char *cmd, unsigned long now) {
   if (strcmp(cmd, "!STATE") == 0) { report(); return; }
   if (strcmp(cmd, "!RESET") == 0) {
     setTemperature(START_TEMP_F, now);
+    pendingHalfTurns = 0;
     targetDeg = HOME_DEG;
     // Ignore a car held in place across reset or an interrupted camera read.
     carLatched = carLatched || candidate != CLEAR_SCENE || now - lastSampleMs > MAX_SAMPLE_GAP_MS;
@@ -200,11 +214,13 @@ void handleCommand(const char *cmd, unsigned long now) {
     if (temperatureF > UINT32_MAX - CAR_RISE_F) { Serial.println(F("ERR RANGE")); return; }
     setTemperature(temperatureF + CAR_RISE_F, now);
   } else if (strncmp(cmd, "!MOTOR ", 7) == 0 && parseUnsigned(cmd + 7, value) && value <= 180) {
+    pendingHalfTurns = 0;
     targetDeg = int(value);
   } else if (strcmp(cmd, "!AUTO 0") == 0 || strcmp(cmd, "!AUTO 1") == 0) {
     const bool enable = cmd[6] == '1';
     if (enable != automatic) {
       automatic = enable;
+      if (!enable) pendingHalfTurns = 0;
       candidate = UNKNOWN_SCENE;
       if (enable) carLatched = true;
     }
@@ -239,7 +255,6 @@ void setup() {
   EarthState saved;
   if (memory.load(saved)) {
     setTemperature(saved.temperature, millis());
-    commandedDeg = targetDeg = saved.angle;
     automatic = saved.automatic;
     carLatched = saved.carLatched;
   }

@@ -12,12 +12,12 @@
 <section class="card" aria-labelledby="tempTitle"><div class="face"><h2 id="tempTitle">温度显示屏</h2><div class="readout heroReading"><strong id="temp">—</strong><small>°F</small></div><div class="footnote">装置显示的模拟温度</div><div class="thermo" id="scale" aria-hidden="true"></div></div>
 <div class="controls"><label for="tempInput">设定温度（°F）</label><form id="tempForm" class="row"><input class="valueIn control" id="tempInput" type="number" min="0" max="4294967295" step="1" value="70" required disabled><button class="control" disabled>应用温度</button><button type="button" data-cmd="!WARM" class="control quick" disabled>+20 °F</button></form><p class="helper">只更新显示屏，舵机保持当前目标角度。</p></div></section>
 <section class="card" aria-labelledby="motorTitle"><div class="face servo"><h2 id="motorTitle">海冰舵机</h2><div class="readout heroReading"><strong id="motor">—</strong><small>°</small></div><div id="target" class="footnote">等待指令角度</div><div class="dial" id="dial" aria-hidden="true"><i></i></div></div>
-<div class="controls"><label for="angle">设定角度</label><div class="row"><div class="motor-setting"><input id="angle" type="range" min="0" max="180" value="0" class="control" disabled><output id="angleOut" for="angle">0°</output></div><button id="setMotor" class="control" disabled>应用角度</button></div>
-<div class="presets"><button data-cmd="!MOTOR 0" class="control" disabled>回原位 · 0°</button><button data-cmd="!MOTOR 180" class="control" disabled>转半圈 · 180°</button></div></div></section>
+<div class="controls"><label for="angle">设定角度</label><div class="row"><div class="motor-setting"><input id="angle" type="range" min="0" max="180" value="180" class="control" disabled><output id="angleOut" for="angle">180°</output></div><button id="setMotor" class="control" disabled>应用角度</button></div>
+<div class="presets"><button data-cmd="!MOTOR 180" class="control" disabled>回原位 · 180°</button><button data-cmd="!MOTOR 0" class="control" disabled>转到另一端 · 0°</button></div></div></section>
 </div>
 <section class="panel"><div><strong>WonderCam</strong><small id="feature">等待识别数据</small></div><div class="mode" role="group" aria-label="识别联动"><button data-auto="1" data-cmd="!AUTO 1" class="control" aria-pressed="false" disabled>相机联动</button><button data-auto="0" data-cmd="!AUTO 0" class="control" aria-pressed="false" disabled>仅手动</button></div></section>
-<section class="panel resetpanel"><div><strong>演示复位</strong><small>温度回到 70°F，舵机回到 0°。</small></div><button data-cmd="!RESET" class="reset control" disabled>↺ &nbsp; Reset · 总复位</button></section>
-<details class="help"><summary>连接与操作说明</summary><p>先上传配套的 TangibleEarth.ino。关闭 Arduino IDE 的串口监视器，在桌面 Chrome 或 Edge 打开本页，再选择 Arduino Uno 的 USB 端口。相机可单独用 USB 供电。</p><p>相机联动时，汽车（ID 3）触发升温 20°F 并让舵机转到 180°。现场需要接管时，点「仅手动」暂停识别联动。角度是 Uno 发出的舵机指令值。</p></details>
+<section class="panel resetpanel"><div><strong>演示复位</strong><small>温度回到 70°F，舵机回到 180°。</small></div><button data-cmd="!RESET" class="reset control" disabled>↺ &nbsp; Reset · 总复位</button></section>
+<details class="help"><summary>连接与操作说明</summary><p>先上传配套的 TangibleEarth.ino。关闭 Arduino IDE 的串口监视器，在桌面 Chrome 或 Edge 打开本页，再选择 Arduino Uno 的 USB 端口。相机可单独用 USB 供电。</p><p>相机联动时，每次重新识别汽车（ID 3），温度升高 20°F，舵机在 180° 和 0° 两端之间转半圈。移开至少 1 秒再放回即可再次触发。现场需要接管时，点「仅手动」暂停识别联动。角度是 Uno 发出的舵机指令值。</p></details>
 </main><script>
 'use strict';
 const $ = id => document.getElementById(id);
